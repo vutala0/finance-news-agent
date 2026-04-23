@@ -167,7 +167,8 @@ def classify_news(title: str, summary: str, ticker: str, k: int = 3) -> dict:
         k: Number of similar past items to retrieve (default 3)
     
     Returns:
-        A dict with keys: sentiment, confidence, reasoning, relevance
+        A dict with keys: sentiment, confidence, reasoning, relevance, retrieved
+        where `retrieved` is the list of similar past items used as context.
     """
     # Retrieve similar past items from the vector DB
     retrieved = retrieve_similar(
@@ -175,7 +176,7 @@ def classify_news(title: str, summary: str, ticker: str, k: int = 3) -> dict:
         summary=summary,
         ticker=ticker,
         k=k,
-        exclude_self=True  # Never retrieve the article we're classifying
+        exclude_self=True
     )
     retrieved_block = format_retrieved_for_prompt(retrieved)
     
@@ -208,6 +209,9 @@ def classify_news(title: str, summary: str, ticker: str, k: int = 3) -> dict:
             "relevance": "low",
             "reasoning": f"Could not parse response: {text[:100]}"
         }
+    
+    # Attach the retrieved precedents to the result so callers can display them
+    result["retrieved"] = retrieved
     
     return result
 
