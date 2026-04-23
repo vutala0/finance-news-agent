@@ -59,10 +59,6 @@ def run_eval(golden_items: list[dict]) -> list[dict]:
     for i, item in enumerate(golden_items, 1):
         print(f"[{i}/{len(golden_items)}] Evaluating: {item['title'][:70]}...")
         
-        # Small delay to be respectful of free-tier rate limits (15 RPM)
-        # This also helps avoid hitting the quota on big eval runs
-        if i > 1:
-            time.sleep(4)
         
         try:
             prediction = classify_news(

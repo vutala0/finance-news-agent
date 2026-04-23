@@ -65,12 +65,41 @@ python main.py
 ## Roadmap
 
 - [x] Walking skeleton — end-to-end pipeline
-- [x] Prompt iteration — ticker-aware classification with relevance scoring
-- [ ] Evaluation harness — hand-labeled test set + automated grading
+- [x] Prompt iteration — ticker-aware classification with relevance scoring  
+- [x] Evaluation harness — hand-labeled test set + automated grading
+- [ ] Few-shot examples — inject calibration anchors into the prompt
 - [ ] Retrieval improvements — semantic search over broader news corpus
 - [ ] Agentic synthesis — multi-source reasoning across filings, news, and market data
 - [ ] Web UI (Streamlit)
 - [ ] Public deployment
+
+## Evaluation
+
+This project includes a full evaluation harness: a hand-labeled golden set of 25 real news items across 5 tickers (AAPL, TSLA, JPM, NVDA, BEN), a runner that benchmarks the classifier against ground truth, and an automatic report generator that surfaces failure patterns.
+
+### Current Baseline
+
+| Metric | Baseline | After prompt iteration |
+| --- | --- | --- |
+| Sentiment accuracy | 52% | **56%** (+4 pts) |
+| Relevance accuracy | 68% | **80%** (+12 pts) |
+| Both correct | 48% | **52%** (+4 pts) |
+
+### Key Finding
+
+Prompt iteration moved relevance accuracy significantly but barely moved sentiment accuracy. The failure modes are rooted in financial-domain calibration, not prompt wording — suggesting the next productive intervention is few-shot examples or retrieval of analogous historical cases, rather than further prompt tweaking.
+
+Full reports are written to `/reports/` after each eval run.
+
+### Running Evaluation
+
+```bash
+# 1. Run classifier against the golden set (writes to data/eval_results_*.json)
+python eval_runner.py
+
+# 2. Generate a readable Markdown report (writes to reports/eval_report_*.md)
+python eval_report.py
+```
 
 ## Built With
 
