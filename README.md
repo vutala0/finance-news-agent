@@ -65,11 +65,12 @@ python main.py
 ## Roadmap
 
 - [x] Walking skeleton — end-to-end pipeline
-- [x] Prompt iteration — ticker-aware classification with relevance scoring  
+- [x] Prompt iteration — ticker-aware classification with relevance scoring
 - [x] Evaluation harness — hand-labeled test set + automated grading
-- [x] Few-shot prompting experiment — regressed, reverted ([see report](./reports/))
-- [ ] Retrieval-Augmented Generation (RAG) — dynamic retrieval of similar historical cases
-- [ ] Agentic synthesis — multi-source reasoning across filings, news, and market data
+- [x] Few-shot prompting experiment — regressed, reverted
+- [x] RAG pipeline — ChromaDB + semantic retrieval of labeled precedents
+- [ ] Corpus expansion — grow golden set to 100+ items for meaningful RAG gains
+- [ ] Retrieval instrumentation — measure retrieval quality separate from end-to-end accuracy
 - [ ] Web UI (Streamlit)
 - [ ] Public deployment
 
@@ -112,6 +113,20 @@ python eval_runner.py
 # 2. Generate a readable Markdown report (writes to reports/eval_report_*.md)
 python eval_report.py
 ```
+
+### RAG Pipeline (Week 3)
+
+Implemented full RAG pipeline: embedding with Google's gemini-embedding-001, storage in ChromaDB, semantic retrieval of top-3 similar precedents per query, with self-exclusion to prevent data leakage.
+
+| Approach | Sentiment | Relevance |
+| --- | --- | --- |
+| Zero-shot baseline | 52-72% | 68-80% |
+| Few-shot (static) | 35-45% | 60-75% |
+| **RAG (dynamic retrieval)** | **60%** | **76%** |
+
+**Key finding:** At this corpus size (25 items), RAG is statistically indistinguishable from a well-tuned zero-shot prompt. The failures are structural — they require financial-domain judgment no retrieval precedent can inject. RAG's value scales with corpus quality and size, not with pipeline sophistication.
+
+See full RAG architecture in `build_index.py`, `retrieval.py`, and the retrieval-aware prompt in `classifier.py`.
 
 ## Built With
 
