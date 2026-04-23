@@ -6,7 +6,7 @@ with brief reasoning.
 
 import os
 import json
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 
 
@@ -14,21 +14,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure the Gemini client with our API key
-# os.getenv reads the variable we set in .env
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     raise ValueError(
         "GEMINI_API_KEY not found. Did you create a .env file with your key?"
     )
 
-genai.configure(api_key=api_key)
+# Initialize the client
+client = genai.Client(api_key=api_key)
 
-# Initialize the model — we're using Flash-Lite as it's fast and free-tier friendly
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+# Using 2.5 Flash (not Flash-Lite) for better quality.
+# Tradeoff: same free-tier rate cap but higher quality reasoning.
+MODEL_NAME = "gemini-2.5-flash"
 
 
-# The prompt is arguably the most important piece of code in this file.
-# It's plain English, but it's ENGINEERING — every word matters.
+# Prompt design notes:
+# - Explicit ticker context to prevent abstract reasoning
+# - Relevance field to distinguish on-topic vs tangential news
+# - Reasoning field for interpretability and failure debugging
+# - Explicit guidance on directional calls: don't over-neutralize clear signals
 CLASSIFICATION_PROMPT = """You are a financial news analyst. Classify the following news item 
 for its likely impact on the stock price of {ticker}.
 
@@ -46,10 +50,17 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no extr
 Rules:
 - bullish = likely positive impact on {ticker}'s stock price
 - bearish = likely negative impact on {ticker}'s stock price
-- neutral = unclear or mixed signals
-- relevance = how directly this news is about {ticker} (high = directly about the company; low = tangential or general industry news)
+- neutral = only when signals are genuinely mixed, unclear, or the news is not 
+  really about {ticker}
+- relevance = how directly this news is about {ticker} (high = directly about 
+  the company; low = tangential or general industry news)
 - If relevance is low, sentiment should usually be neutral
-- Be conservative with "high" confidence — reserve it for very clear cases"""
+- Major events (CEO departures, regulatory actions, earnings misses, supply 
+  disruptions, analyst downgrades) ARE directional signals — do not default 
+  to neutral just because the outcome is uncertain. Commit to bullish or bearish 
+  when a reasonable investor would.
+- "Be conservative with confidence" means using 'medium' or 'low' confidence 
+  on unclear cases — it does NOT mean defaulting sentiment to neutral."""
 
 
 def classify_news(title: str, summary: str, ticker: str) -> dict:
@@ -69,22 +80,14 @@ def classify_news(title: str, summary: str, ticker: str) -> dict:
         title=title,
         summary=summary
     )
-    # Fill in the prompt template with the actual news content
-    prompt = CLASSIFICATION_PROMPT.format(
-    ticker=ticker.upper(),
-    title=title,
-    summary=summary
-)
     
-    # Send it to Gemini
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=prompt
+    )
     
-    # Gemini returns text. We asked for JSON — now we parse it.
-    # Sometimes models wrap JSON in markdown code fences despite our prompt.
-    # This strip handles that gracefully.
     text = response.text.strip()
     if text.startswith("```"):
-        # Remove markdown fences if they slipped in
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
@@ -93,17 +96,16 @@ def classify_news(title: str, summary: str, ticker: str) -> dict:
     try:
         result = json.loads(text)
     except json.JSONDecodeError:
-        # If Gemini gave us garbage, return a safe fallback
         result = {
             "sentiment": "neutral",
             "confidence": "low",
+            "relevance": "low",
             "reasoning": f"Could not parse response: {text[:100]}"
         }
     
     return result
 
 
-# Quick test when run directly
 if __name__ == "__main__":
     print("Testing classifier with a sample headline...")
     result = classify_news(
