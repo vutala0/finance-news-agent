@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 from classifier import classify_news
-
+# from few_shot_examples import get_held_out_items
 
 # Resolve paths relative to this script's location (more robust)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +30,9 @@ def load_golden_set() -> list[dict]:
     """Load the hand-labeled ground truth dataset."""
     with open(GOLDEN_SET_PATH, "r", encoding="utf-8") as f:
         items = json.load(f)
+    
+    # Exclude items used as few-shot examples (data leakage prevention)
+    # items = get_held_out_items(items)
     
     # Filter out any items that weren't actually labeled
     labeled_items = [

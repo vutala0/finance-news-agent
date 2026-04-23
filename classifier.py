@@ -6,7 +6,7 @@ with brief reasoning.
 Includes retry-with-backoff logic to handle rate limits (429) and transient
 service unavailability (503) gracefully.
 """
-
+from few_shot_examples import load_few_shot_examples, format_examples_for_prompt
 import os
 import json
 import re
@@ -26,6 +26,10 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
+# Load few-shot examples once at import time
+_FEW_SHOT_EXAMPLES = load_few_shot_examples()
+_FEW_SHOT_BLOCK = format_examples_for_prompt(_FEW_SHOT_EXAMPLES)
+
 # Using 2.5 Flash for reasoning quality.
 # Free-tier rate limit: 5 requests/minute, 500/day.
 MODEL_NAME = "gemini-2.5-flash-lite"
@@ -38,6 +42,15 @@ MAX_BACKOFF_SECONDS = 60
 
 CLASSIFICATION_PROMPT = """You are a financial news analyst. Classify the following news item 
 for its likely impact on the stock price of {ticker}.
+
+Below are examples of correctly classified news items. Use them as calibration 
+anchors — match the pattern they demonstrate.
+
+---
+{few_shot_examples}
+---
+
+Now classify the following news item:
 
 News Title: {title}
 News Summary: {summary}
@@ -147,10 +160,11 @@ def classify_news(title: str, summary: str, ticker: str) -> dict:
         A dict with keys: sentiment, confidence, reasoning, relevance
     """
     prompt = CLASSIFICATION_PROMPT.format(
-        ticker=ticker.upper(),
-        title=title,
-        summary=summary
-    )
+    ticker=ticker.upper(),
+    title=title,
+    summary=summary,
+    few_shot_examples=_FEW_SHOT_BLOCK
+)
     
     text = _call_gemini_with_retry(prompt).strip()
     

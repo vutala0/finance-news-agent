@@ -67,8 +67,8 @@ python main.py
 - [x] Walking skeleton — end-to-end pipeline
 - [x] Prompt iteration — ticker-aware classification with relevance scoring  
 - [x] Evaluation harness — hand-labeled test set + automated grading
-- [ ] Few-shot examples — inject calibration anchors into the prompt
-- [ ] Retrieval improvements — semantic search over broader news corpus
+- [x] Few-shot prompting experiment — regressed, reverted ([see report](./reports/))
+- [ ] Retrieval-Augmented Generation (RAG) — dynamic retrieval of similar historical cases
 - [ ] Agentic synthesis — multi-source reasoning across filings, news, and market data
 - [ ] Web UI (Streamlit)
 - [ ] Public deployment
@@ -76,6 +76,18 @@ python main.py
 ## Evaluation
 
 This project includes a full evaluation harness: a hand-labeled golden set of 25 real news items across 5 tickers (AAPL, TSLA, JPM, NVDA, BEN), a runner that benchmarks the classifier against ground truth, and an automatic report generator that surfaces failure patterns.
+
+### Few-shot Experiment (Reverted)
+
+Attempted to improve calibration by adding 5 labeled in-context examples. Two variants tested:
+
+| Approach | Sentiment | Relevance |
+| --- | --- | --- |
+| Zero-shot baseline | 56% | 80% |
+| Few-shot v1 (unbalanced) | 40% | 60% |
+| Few-shot v2 (rebalanced) | 45% | 75% |
+
+**Finding:** A small hand-curated example set (5 items) introduced more bias than it corrected. Distribution mismatches between the few-shot pool and the test set pushed the model's priors toward the examples' dominant labels. Concluded that with this small a test corpus, dynamic retrieval (RAG) is a better fit than static few-shot examples. See `reports/` for detailed analysis.
 
 ### Current Baseline
 
