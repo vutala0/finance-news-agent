@@ -6,7 +6,10 @@ with brief reasoning.
 Includes retry-with-backoff logic to handle rate limits (429) and transient
 service unavailability (503) gracefully.
 """
-from few_shot_examples import load_few_shot_examples, format_examples_for_prompt
+# Few-shot prompting experiment — reverted after testing showed regression.
+# See commit history and reports/ for analysis. Kept file in repo as historical record.
+# from few_shot_examples import load_few_shot_examples, format_examples_for_prompt
+
 import os
 import json
 import re
@@ -14,7 +17,7 @@ import time
 from google import genai
 from google.genai import errors as genai_errors
 from dotenv import load_dotenv
-
+from retrieval import retrieve_similar, format_retrieved_for_prompt
 
 load_dotenv()
 
@@ -27,8 +30,8 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # Load few-shot examples once at import time
-_FEW_SHOT_EXAMPLES = load_few_shot_examples()
-_FEW_SHOT_BLOCK = format_examples_for_prompt(_FEW_SHOT_EXAMPLES)
+# _FEW_SHOT_EXAMPLES = load_few_shot_examples()
+# _FEW_SHOT_BLOCK = format_examples_for_prompt(_FEW_SHOT_EXAMPLES)
 
 # Using 2.5 Flash for reasoning quality.
 # Free-tier rate limit: 5 requests/minute, 500/day.
@@ -43,14 +46,16 @@ MAX_BACKOFF_SECONDS = 60
 CLASSIFICATION_PROMPT = """You are a financial news analyst. Classify the following news item 
 for its likely impact on the stock price of {ticker}.
 
-Below are examples of correctly classified news items. Use them as calibration 
-anchors — match the pattern they demonstrate.
+Below are {k} past news items with known correct classifications, retrieved 
+because they are the most semantically similar to the news item you need to 
+classify. Use them as reasoning anchors — especially the patterns in their 
+labeling — to inform your classification.
 
 ---
-{few_shot_examples}
+{retrieved_examples}
 ---
 
-Now classify the following news item:
+Now classify the following new item:
 
 News Title: {title}
 News Summary: {summary}
@@ -71,12 +76,14 @@ Rules:
 - relevance = how directly this news is about {ticker} (high = directly about 
   the company; low = tangential or general industry news)
 - If relevance is low, sentiment should usually be neutral
+- Use the retrieved examples as calibration anchors — if similar past articles 
+  were labeled consistently, that pattern is probably correct here too. But 
+  do not blindly copy their labels — reason about what actually fits THIS 
+  specific article.
 - Major events (CEO departures, regulatory actions, earnings misses, supply 
   disruptions, analyst downgrades) ARE directional signals — do not default 
   to neutral just because the outcome is uncertain. Commit to bullish or bearish 
-  when a reasonable investor would.
-- "Be conservative with confidence" means using 'medium' or 'low' confidence 
-  on unclear cases — it does NOT mean defaulting sentiment to neutral."""
+  when a reasonable investor would."""
 
 
 def _extract_retry_delay(error_message: str) -> float | None:
@@ -147,34 +154,51 @@ def _call_gemini_with_retry(prompt: str) -> str:
     raise RuntimeError("Exhausted all retries without success")
 
 
-def classify_news(title: str, summary: str, ticker: str) -> dict:
+def classify_news(title: str, summary: str, ticker: str, k: int = 3) -> dict:
     """
     Send a news item to Gemini and get back a structured sentiment classification.
+    Uses RAG: retrieves k similar past items from the indexed corpus and injects 
+    them into the prompt as reasoning anchors.
     
     Args:
         title: The news headline
         summary: Brief description of the news content
         ticker: The stock ticker this news is being analyzed for
+        k: Number of similar past items to retrieve (default 3)
     
     Returns:
         A dict with keys: sentiment, confidence, reasoning, relevance
     """
-    prompt = CLASSIFICATION_PROMPT.format(
-    ticker=ticker.upper(),
-    title=title,
-    summary=summary,
-    few_shot_examples=_FEW_SHOT_BLOCK
-)
+    # Retrieve similar past items from the vector DB
+    retrieved = retrieve_similar(
+        title=title,
+        summary=summary,
+        ticker=ticker,
+        k=k,
+        exclude_self=True  # Never retrieve the article we're classifying
+    )
+    retrieved_block = format_retrieved_for_prompt(retrieved)
     
+    # Build the full prompt with retrieved precedents
+    prompt = CLASSIFICATION_PROMPT.format(
+        ticker=ticker.upper(),
+        title=title,
+        summary=summary,
+        k=k,
+        retrieved_examples=retrieved_block
+    )
+    
+    # Call the LLM with retry-with-backoff
     text = _call_gemini_with_retry(prompt).strip()
     
-    # Strip markdown code fences if the model added them despite instructions
+    # Strip markdown fences if present
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
     
+    # Parse JSON with graceful fallback
     try:
         result = json.loads(text)
     except json.JSONDecodeError:
