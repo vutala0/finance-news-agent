@@ -2,75 +2,152 @@
 
 **Live demo: [finance-news-intelligence.streamlit.app](https://finance-news-intelligence.streamlit.app/)**
 
-An AI-powered financial news classifier grounded in a Retrieval-Augmented Generation (RAG) pipeline. Enter a stock ticker, and the system fetches recent news, filters for substantive coverage through a two-stage relevance pipeline, and classifies each article by its likely impact on the stock — with retrieved historical precedents visible for every classification.
+An AI-powered financial news classifier grounded in a Retrieval-Augmented Generation (RAG) pipeline. Enter a stock ticker, and the system fetches recent news, filters for substantive coverage through a two-stage relevance pipeline, classifies each article by its likely impact on the stock price, and surfaces the retrieved historical precedents that informed each classification.
 
-## Stack
+Built as a hands-on AI product management portfolio project — the goal was to ship a real, deployable AI product end-to-end while practicing the eval-driven development loop that real AI teams use.
 
-- **Classification:** Google Gemini (Flash-Lite)
-- **Embeddings:** Google `gemini-embedding-001`
-- **Vector store:** ChromaDB (local persistence)
-- **News source:** Finnhub API
-- **UI:** Streamlit (deployed on Streamlit Cloud)
+---
 
-## Why This Project
+## What it does
 
-Exploring the product–engineering tradeoffs of applying LLMs to financial information workflows — specifically:
+Given a stock ticker like `AAPL` or `TSLA`, the system:
 
-- Structured output design with JSON schemas and fallback handling
-- Prompt engineering for domain-specific classification tasks
-- Separating retrieval quality from classification quality in evaluation
+1. Fetches the last ~14 days of news articles from Finnhub
+2. Filters out tangential articles through a two-stage relevance pipeline
+3. For each remaining article, retrieves the 3 most similar hand-labeled precedents from a vector database
+4. Classifies each article as bullish, bearish, or neutral using Gemini with the retrieved precedents as context
+5. Aggregates the results into a market mood indicator and presents each article with its classification, reasoning, and visible precedents
+
+The live UI is a Streamlit app with a Tickertape-inspired aesthetic — dense financial-data typography, a segmented mood bar, and inline-expandable precedent cards.
+
+---
 
 ## Architecture
 
-```
-User input (ticker)
-    ↓
-news_fetcher.py  →  Yahoo Finance API
-    ↓
-classifier.py    →  Gemini API (structured JSON output)
-    ↓
-main.py          →  Orchestration + summary
-```
+### News ingestion and relevance filtering
 
-### News Ingestion and Filtering
+News is fetched from the Finnhub API, chosen over Yahoo Finance (via `yfinance`) because Yahoo rate-limits cloud datacenter IPs, making Yahoo-sourced apps unreliable in production environments.
 
-News is fetched from Yahoo Finance (via yfinance), then passed through a two-stage relevance filter:
+Every article passes through a two-stage relevance filter before classification:
 
-1. **Stage 1 (heuristic):** company identifiers (ticker + canonical name) must appear in title or summary
-2. **Stage 2 (LLM):** a Gemini Flash-Lite call per candidate article asks whether the article is primarily about the target company, not merely mentioning it
+- **Stage 1 (heuristic):** deterministic string matching — does the company's ticker or canonical name appear in the title or summary? Fast, free, catches obvious tangential coverage.
+- **Stage 2 (LLM):** a lightweight Gemini Flash-Lite call per candidate, asking whether the article is genuinely useful to someone tracking the company. Catches the cases where the company is mentioned but isn't the subject.
 
-The cost-tiered cascade means LLM calls only run on articles that survived the heuristic, and we early-exit once we've collected enough relevant results. This pattern keeps the pipeline fast and cheap while catching the cases where simple string-matching fails (e.g., "Nike... Apple CEO Tim Cook" mentions Apple but isn't about Apple).
+The cost-tiered cascade means the LLM check only runs on articles that survived the cheap heuristic, and the pipeline early-exits once enough relevant articles have been collected. This pattern keeps per-query cost and latency bounded while still catching nuanced edge cases like "Nike is now the highest-yielding dividend stock... Should you follow Apple CEO Tim Cook's lead?" — which mentions Apple but isn't about it.
 
-## Running Locally
+A small manual alias file (`ticker_aliases.py`) handles cases where a brand name and legal name differ (Google/Alphabet, Meta/Facebook, etc.). A fallback skips the heuristic stage entirely when it rejects every candidate, trusting the source's ticker tagging and letting the LLM do all the filtering.
+
+### RAG pipeline
+
+The retrieval layer is built on three components:
+
+- **Embedding model:** Google `gemini-embedding-001`
+- **Vector store:** ChromaDB with local persistent storage
+- **Corpus:** 25 hand-labeled historical news items across AAPL, TSLA, JPM, NVDA, and BEN, each tagged with sentiment, relevance, and reasoning notes
+
+At classification time, the query article is embedded, the top-3 most similar past items are retrieved (with self-exclusion to prevent data leakage during evaluation), and those retrieved items are injected into the classifier prompt as reasoning anchors. The LLM sees both the new article and three historical precedents with their correct labels.
+
+### Classification
+
+Each article is classified by a structured Gemini prompt that asks for:
+
+- **sentiment** — bullish, bearish, or neutral
+- **confidence** — high, medium, low
+- **relevance** — how directly the news is about the target ticker
+- **reasoning** — one-sentence explanation grounded in the article and the precedents
+
+Retry-with-backoff logic handles 429 rate limits and 503 transient errors. JSON parsing falls back gracefully when the LLM response is malformed.
+
+### Evaluation harness
+
+The project includes a full offline evaluation loop:
+
+- `data/golden_set.json` — hand-labeled ground truth (25 items)
+- `validate_golden_set.py` — schema validator for labels (catches typos like "nutral" → "neutral")
+- `eval_runner.py` — runs the classifier against the golden set and writes timestamped results to `data/`
+- `eval_report.py` — generates human-readable Markdown reports in `reports/` with failure pattern analysis (over-neutralized, over-directional, wrong-direction)
+
+---
+
+## Evaluation results
+
+The classifier was benchmarked at each major iteration point. The goal was to practice the full eval-driven development loop: baseline, hypothesize, intervene, measure, compare, decide.
+
+| Iteration | Sentiment accuracy | Relevance accuracy |
+| --- | --- | --- |
+| Zero-shot baseline | 52% | 68% |
+| Prompt iteration (ticker context + relevance field) | 56-72%* | 72-80%* |
+| Few-shot (unbalanced 5-item pool) | 40% | 60% |
+| Few-shot (rebalanced) | 45% | 75% |
+| **RAG with semantic retrieval** | **60%** | **76%** |
+
+*Range reflects run-to-run variance on the same test set. LLM evaluations are inherently stochastic — single-run numbers have ±10 point noise.
+
+### Key findings
+
+- **Prompt engineering has a ceiling.** Moving from a bare prompt to a ticker-aware, relevance-tagged prompt improved relevance accuracy significantly (+12 points) but barely moved sentiment accuracy (+4 points). Scoping can be taught through prompts; financial-domain directional judgment cannot.
+- **Static few-shot examples regressed accuracy.** A 5-item hand-picked few-shot pool introduced distribution-mismatch bias — the model's priors tilted toward the dominant label mix in the example set, hurting performance on cases unlike the examples. Dynamic retrieval (RAG) sidesteps this.
+- **RAG at this corpus size is roughly on par with a well-tuned zero-shot prompt.** With only 25 precedents, retrieval often returns similar-but-also-ambiguous cases for the hardest inputs. RAG's value scales with corpus size and quality, not with pipeline sophistication.
+- **Ground-truth quality is the real ceiling.** The labels reflect a single non-expert author's judgment. Bounds on accuracy here reflect bounds on labeling consistency as much as bounds on the model. A future iteration would replace opinion-based labels with objective market-outcome labels (price movement in the N days following publication).
+
+Full eval reports with per-run failure pattern analysis live in `reports/`.
+
+---
+
+## Tech stack
+
+- **Classification & filtering:** Google Gemini (Flash-Lite via `google-genai` SDK)
+- **Embeddings:** Google `gemini-embedding-001`
+- **Vector store:** ChromaDB with persistent local storage
+- **News source:** Finnhub API (free tier, 60 calls/minute)
+- **UI:** Streamlit with custom CSS (Manrope + JetBrains Mono typography)
+- **Deployment:** Streamlit Cloud
+- **Language:** Python 3.11
+
+---
+
+## Running locally
 
 ```bash
-# 1. Clone and enter the repo
+# Clone the repo
 git clone https://github.com/vutala0/finance-news-agent.git
 cd finance-news-agent
 
-# 2. Create virtual environment
+# Create a virtual environment
 python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows PowerShell
-# source venv/bin/activate    # Mac/Linux
+source venv/bin/activate   # On Windows: venv\Scripts\activate
 
-# 3. Install dependencies
-pip install google-generativeai yfinance python-dotenv
+# Install dependencies
+pip install -r requirements.txt
 
-# 4. Add your Gemini API key
-# Create a .env file in the project root with:
-# GEMINI_API_KEY=your_key_here
+# Create .env with your API keys
+echo "GEMINI_API_KEY=your_gemini_key_here" > .env
+echo "FINNHUB_API_KEY=your_finnhub_key_here" >> .env
 
-# 5. Run
-python main.py
+# Build the vector index (one-time setup)
+python build_index.py
+
+# Run the app
+streamlit run app.py
 ```
 
-## Design Notes
+Get a free Gemini API key at [ai.google.dev](https://ai.google.dev/) and a free Finnhub key at [finnhub.io/register](https://finnhub.io/register).
 
-**Why Gemini 2.5 Flash-Lite?** For a classification task with clear criteria, a smaller/faster model is cost-optimal. Flagship models are reserved for genuinely ambiguous, multi-step reasoning.
+---
 
-**Why structured JSON output?** The LLM isn't just generating prose — it's functioning as a parser. Structured output allows downstream aggregation, summarization, and future evaluation.
+## Running evaluation
 
-**Why a `relevance` field?** Yahoo's ticker-tagged news often includes tangential items (competitor news, sector trends). The relevance score lets the pipeline distinguish "this is about the target company" from "this mentions the sector."
+```bash
+# 1. Run the classifier against the golden set
+python eval_runner.py
+
+# 2. Generate a readable Markdown report
+python eval_report.py
+```
+
+Results are written to `data/eval_results_<timestamp>.json` and `reports/eval_report_<timestamp>.md`. Each report groups failures by error pattern and leaves a section for hand-written interpretation to accumulate learnings run-over-run.
+
+---
 
 ## Roadmap
 
@@ -81,67 +158,26 @@ python main.py
 - [x] RAG pipeline — ChromaDB + semantic retrieval of labeled precedents
 - [x] Two-stage relevance filter — heuristic + LLM-based source quality control
 - [x] Streamlit UI with RAG visualization
-- [ ] Public deployment (Streamlit Cloud)
+- [x] Public deployment with Finnhub integration
+- [ ] Market-outcome ground truth — replace opinion-based labels with objective price-movement labels
 - [ ] Corpus expansion — grow golden set to 100+ items for meaningful RAG gains
-- [ ] Market-outcome ground truth — objective price-based labels
+- [ ] Retrieval instrumentation — measure retrieval quality (precision@k, relevance@k) separately from end-to-end accuracy
+- [ ] Near-duplicate detection — cluster and deduplicate articles covering the same event
 
-## Evaluation
+---
 
-This project includes a full evaluation harness: a hand-labeled golden set of 25 real news items across 5 tickers (AAPL, TSLA, JPM, NVDA, BEN), a runner that benchmarks the classifier against ground truth, and an automatic report generator that surfaces failure patterns.
+## What this project is not
 
-### Few-shot Experiment (Reverted)
+- It is not investment advice. Classifications are experimental and should not drive trading decisions.
+- It is not production-grade at scale. The corpus is small, the labels reflect one author's judgment, and the filtering is tuned for precision over recall.
+- It is not a finished product — it is a hands-on portfolio piece designed to practice the full AI product development loop, from walking skeleton through iteration and deployment.
 
-Attempted to improve calibration by adding 5 labeled in-context examples. Two variants tested:
+---
 
-| Approach | Sentiment | Relevance |
-| --- | --- | --- |
-| Zero-shot baseline | 56% | 80% |
-| Few-shot v1 (unbalanced) | 40% | 60% |
-| Few-shot v2 (rebalanced) | 45% | 75% |
+## About the build
 
-**Finding:** A small hand-curated example set (5 items) introduced more bias than it corrected. Distribution mismatches between the few-shot pool and the test set pushed the model's priors toward the examples' dominant labels. Concluded that with this small a test corpus, dynamic retrieval (RAG) is a better fit than static few-shot examples. See `reports/` for detailed analysis.
+This project was built end-to-end as a ~2-week AI PM portfolio exercise. The goal was to practice, in sequence: scoping an AI problem, building a walking skeleton, adding evaluation infrastructure before features, iterating on prompts, attempting and diagnosing a failed few-shot experiment, shipping a RAG pipeline, adding production-grade filtering, building a polished UI, and deploying publicly.
 
-### Current Baseline
+Notable decisions and lessons are captured in commit messages and in the eval reports under `reports/`. If you're a recruiter or hiring manager interested in how I think about AI products, the commit log tells the story better than any resume line.
 
-| Metric | Baseline | After prompt iteration |
-| --- | --- | --- |
-| Sentiment accuracy | 52% | **56%** (+4 pts) |
-| Relevance accuracy | 68% | **80%** (+12 pts) |
-| Both correct | 48% | **52%** (+4 pts) |
-
-### Key Finding
-
-Prompt iteration moved relevance accuracy significantly but barely moved sentiment accuracy. The failure modes are rooted in financial-domain calibration, not prompt wording — suggesting the next productive intervention is few-shot examples or retrieval of analogous historical cases, rather than further prompt tweaking.
-
-Full reports are written to `/reports/` after each eval run.
-
-### Running Evaluation
-
-```bash
-# 1. Run classifier against the golden set (writes to data/eval_results_*.json)
-python eval_runner.py
-
-# 2. Generate a readable Markdown report (writes to reports/eval_report_*.md)
-python eval_report.py
-```
-
-### RAG Pipeline (Week 3)
-
-Implemented full RAG pipeline: embedding with Google's gemini-embedding-001, storage in ChromaDB, semantic retrieval of top-3 similar precedents per query, with self-exclusion to prevent data leakage.
-
-| Approach | Sentiment | Relevance |
-| --- | --- | --- |
-| Zero-shot baseline | 52-72% | 68-80% |
-| Few-shot (static) | 35-45% | 60-75% |
-| **RAG (dynamic retrieval)** | **60%** | **76%** |
-
-**Key finding:** At this corpus size (25 items), RAG is statistically indistinguishable from a well-tuned zero-shot prompt. The failures are structural — they require financial-domain judgment no retrieval precedent can inject. RAG's value scales with corpus quality and size, not with pipeline sophistication.
-
-See full RAG architecture in `build_index.py`, `retrieval.py`, and the retrieval-aware prompt in `classifier.py`.
-
-## Built With
-
-- Python 3.13
-- Google Gemini API (2.5 Flash-Lite)
-- yfinance for news ingestion
-- python-dotenv for secrets management
+Built by **[Prashanth Vutala](https://www.linkedin.com/in/vutalap/)** — actively exploring AI Product Manager roles.
