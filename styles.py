@@ -322,5 +322,32 @@ hr {
     margin: 1.25rem 0 !important;
     opacity: 0.5;
 }
+/* ---------- Mobile responsive: verdict first on small screens ---------- */
+@media (max-width: 768px) {
+    /* Streamlit columns use horizontal blocks as wrappers. On mobile they 
+       wrap to vertical stacks. Reverse the order of the main two-column 
+       layout so the mood summary appears before the articles list. */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    
+    /* The mood summary column is second in declaration order but should 
+       appear first on mobile — bump its visual order to -1 (before default 0) */
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2) {
+        order: -1 !important;
+    }
+    
+    /* Tighten the max-width and padding on mobile */
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    /* Make the ticker symbol heading smaller on mobile */
+    .ticker-symbol {
+        font-size: 1.5rem !important;
+    }
+}
 </style>
 """
