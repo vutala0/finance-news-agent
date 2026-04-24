@@ -1,246 +1,326 @@
 """
 Custom CSS for the Finance News Intelligence Agent.
-Aesthetic direction: minimal, refined, Linear/Vercel-adjacent.
-Theme-aware: adapts to light/dark via CSS variables.
+Aesthetic: Tickertape-inspired — financial-data dense, informational, 
+with blue accent and green/red sentiment signaling.
 """
 
 CUSTOM_CSS = """
 <style>
 /* ---------- Font import ---------- */
-@import url('https://rsms.me/inter/inter.css');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* ---------- Base typography overrides ---------- */
-html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, sans-serif !important;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';
+/* ---------- Base typography ---------- */
+html, body, [class*="css"], .stMarkdown, .stText {
+    font-family: 'Manrope', -apple-system, sans-serif !important;
 }
 
-/* Tabular numbers feel for metrics */
+/* Numbers in metrics — tabular monospace */
 .stMetric [data-testid="stMetricValue"] {
     font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
     font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Theme-agnostic color variables ---------- */
-:root {
-    --accent: #5e5ce6;
-    --bullish-fg: #047857;
-    --bullish-bg: #d1fae5;
-    --bearish-fg: #b91c1c;
-    --bearish-bg: #fee2e2;
-    --neutral-fg: #92400e;
-    --neutral-bg: #fef3c7;
-    --card-border: rgba(0, 0, 0, 0.08);
-    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
-    --muted-text: #6b7280;
+.stMetric [data-testid="stMetricLabel"] {
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    color: #6b7280 !important;
 }
 
-/* Dark mode overrides */
+/* ---------- Theme-aware color variables ---------- */
+:root {
+    --accent-blue: #0066CC;
+    --accent-blue-hover: #004C99;
+    --bullish: #059669;
+    --bullish-bg: #d1fae5;
+    --bearish: #DC2626;
+    --bearish-bg: #fee2e2;
+    --neutral: #6B7280;
+    --neutral-bg: #f3f4f6;
+    --bg-canvas: #FAFBFC;
+    --bg-card: #FFFFFF;
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-tertiary: #9CA3AF;
+    --border: #E5E7EB;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
 @media (prefers-color-scheme: dark) {
     :root {
-        --bullish-fg: #6ee7b7;
-        --bullish-bg: rgba(16, 185, 129, 0.15);
-        --bearish-fg: #fca5a5;
-        --bearish-bg: rgba(239, 68, 68, 0.15);
-        --neutral-fg: #fcd34d;
-        --neutral-bg: rgba(245, 158, 11, 0.15);
-        --card-border: rgba(255, 255, 255, 0.08);
-        --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
-        --muted-text: #9ca3af;
+        --bg-canvas: #0B0D0F;
+        --bg-card: #16181C;
+        --text-primary: #F3F4F6;
+        --text-secondary: #9CA3AF;
+        --text-tertiary: #6B7280;
+        --border: #2A2D33;
+        --bullish-bg: rgba(5, 150, 105, 0.15);
+        --bearish-bg: rgba(220, 38, 38, 0.15);
+        --neutral-bg: rgba(107, 114, 128, 0.15);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.4);
     }
 }
 
 /* ---------- Page layout ---------- */
 .block-container {
-    max-width: 900px !important;
-    padding-top: 3rem !important;
+    max-width: 1100px !important;
+    padding-top: 2rem !important;
     padding-bottom: 4rem !important;
 }
 
-/* ---------- Typography hierarchy ---------- */
-h1 {
-    font-weight: 600 !important;
-    letter-spacing: -0.03em !important;
-    font-size: 2rem !important;
-    margin-bottom: 0.25rem !important;
-}
-
-h2 {
-    font-weight: 600 !important;
-    letter-spacing: -0.02em !important;
-    font-size: 1.25rem !important;
-    margin-top: 2rem !important;
-    margin-bottom: 1rem !important;
-}
-
-h3 {
-    font-weight: 500 !important;
-    font-size: 1rem !important;
-    margin-bottom: 0.5rem !important;
-}
-
-/* ---------- Article card styling ---------- */
-.article-card {
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-    padding: 1.25rem;
-    box-shadow: var(--card-shadow);
-    transition: box-shadow 0.15s ease;
-    margin-bottom: 1rem;
-    background-color: var(--background-color, transparent);
-}
-
-.article-card:hover {
-    box-shadow: var(--card-shadow-hover);
-}
-
-.article-title {
-    font-weight: 600;
-    font-size: 0.95rem;
-    line-height: 1.4;
-    margin-bottom: 0.5rem;
-}
-
-.article-source {
-    color: var(--muted-text);
-    font-size: 0.8rem;
-    margin-bottom: 0.75rem;
-}
-
-.article-reasoning {
-    color: var(--muted-text);
-    font-size: 0.85rem;
-    line-height: 1.5;
-    margin-top: 0.5rem;
-}
-
-/* ---------- Badges ---------- */
-.badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    margin-right: 0.4rem;
-}
-
-.badge-bullish { color: var(--bullish-fg); background-color: var(--bullish-bg); }
-.badge-bearish { color: var(--bearish-fg); background-color: var(--bearish-bg); }
-.badge-neutral { color: var(--neutral-fg); background-color: var(--neutral-bg); }
-
-.badge-pill {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 500;
-    background-color: var(--card-border);
-    color: var(--muted-text);
-    margin-right: 0.4rem;
-}
-
-/* ---------- Sentiment distribution bar ---------- */
-.sentiment-bar-container {
-    display: flex;
-    width: 100%;
-    height: 8px;
-    border-radius: 4px;
-    overflow: hidden;
-    margin: 0.75rem 0 1.5rem 0;
-    background-color: var(--card-border);
-}
-
-.sentiment-bar-segment {
-    transition: width 0.3s ease;
-}
-
-.seg-bullish { background-color: #10b981; }
-.seg-bearish { background-color: #ef4444; }
-.seg-neutral { background-color: #f59e0b; }
-
-/* ---------- Precedent sub-card ---------- */
-.precedent-card {
-    border-left: 2px solid var(--card-border);
-    padding-left: 1rem;
-    margin-bottom: 0.75rem;
-}
-
-.precedent-title {
-    font-weight: 500;
-    font-size: 0.85rem;
-    margin-bottom: 0.25rem;
-}
-
-.precedent-meta {
-    color: var(--muted-text);
-    font-size: 0.75rem;
-    margin-bottom: 0.25rem;
-}
-
-.precedent-notes {
-    color: var(--muted-text);
-    font-size: 0.8rem;
-    font-style: italic;
-}
-
-.distance-mono {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    color: var(--muted-text);
-}
-
-/* ---------- Clean up Streamlit defaults ---------- */
+/* Remove Streamlit chrome */
 [data-testid="stSidebar"] { display: none; }
-
 div[data-testid="stToolbar"] { visibility: hidden; }
-
 footer { visibility: hidden; }
+header[data-testid="stHeader"] { display: none; }
 
-.stButton > button {
-    font-weight: 500 !important;
-    border-radius: 8px !important;
-    transition: all 0.15s ease;
+/* ---------- Typography ---------- */
+h1 {
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.025em !important;
+    font-size: 1.75rem !important;
+    margin-bottom: 0.25rem !important;
+    color: var(--text-primary) !important;
 }
 
-/* Input field refinement */
-.stTextInput > div > div > input {
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.95rem !important;
-    border-radius: 8px !important;
-}
-
-/* Expander refinement */
-details {
-    border: 1px solid var(--card-border) !important;
-    border-radius: 8px !important;
-    margin-top: 0.75rem !important;
-}
-
-/* Tighter divider */
-hr {
-    margin: 1.5rem 0 !important;
-    opacity: 0.5;
+h2, h3 {
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.015em !important;
 }
 
 .subtitle {
-    color: var(--muted-text);
+    color: var(--text-secondary);
     font-size: 0.95rem;
     margin-bottom: 2rem;
     line-height: 1.5;
 }
 
 .section-label {
-    color: var(--muted-text);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+/* ---------- Input + button ---------- */
+.stTextInput > div > div > input {
+    font-family: 'Manrope', sans-serif !important;
+    font-size: 1rem !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    border: 1.5px solid var(--border) !important;
+    padding: 0.6rem 1rem !important;
+    height: 48px !important;
+}
+
+.stTextInput > div > div > input:focus {
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1) !important;
+}
+
+.stButton > button {
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    height: 48px !important;
+    font-size: 0.95rem !important;
+    background-color: var(--accent-blue) !important;
+    border: none !important;
+    color: white !important;
+    transition: background-color 0.15s ease !important;
+}
+
+.stButton > button:hover {
+    background-color: var(--accent-blue-hover) !important;
+}
+
+/* ---------- Article card styling ---------- */
+.article-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 0.75rem;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.article-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent-blue);
+}
+
+.article-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.article-title {
+    font-weight: 600;
+    font-size: 0.98rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.article-title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.article-title a:hover {
+    color: var(--accent-blue);
+}
+
+.article-source {
+    color: var(--text-tertiary);
     font-size: 0.75rem;
     font-weight: 500;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
     text-transform: uppercase;
+    margin-bottom: 0.75rem;
+}
+
+.article-reasoning {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--border);
+}
+
+/* ---------- Sentiment signal (big, prominent) ---------- */
+.sentiment-signal {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 4px 12px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.sentiment-bullish {
+    color: var(--bullish);
+    background-color: var(--bullish-bg);
+}
+
+.sentiment-bearish {
+    color: var(--bearish);
+    background-color: var(--bearish-bg);
+}
+
+.sentiment-neutral {
+    color: var(--neutral);
+    background-color: var(--neutral-bg);
+}
+
+.meta-pill {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    padding: 2px 8px;
+    background-color: var(--neutral-bg);
+    border-radius: 4px;
+    font-weight: 500;
+    margin-right: 0.4rem;
+    display: inline-block;
+}
+
+/* ---------- Precedent sub-card ---------- */
+.precedent-card {
+    border-left: 3px solid var(--accent-blue);
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.75rem;
+    background-color: var(--bg-canvas);
+    border-radius: 0 6px 6px 0;
+}
+
+.precedent-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+}
+
+.precedent-meta {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.precedent-notes {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-style: italic;
+    margin-top: 0.4rem;
+}
+
+.distance-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    margin-left: 0.5rem;
+}
+
+/* ---------- Expander refinement ---------- */
+details {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    margin-top: 0.5rem !important;
+    background-color: var(--bg-canvas) !important;
+}
+
+details summary {
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    color: var(--text-secondary) !important;
+    padding: 0.6rem 1rem !important;
+}
+
+/* ---------- Ticker header (shown after analysis) ---------- */
+.ticker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
     margin-bottom: 0.5rem;
-    margin-top: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.ticker-symbol {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+}
+
+.ticker-article-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    font-weight: 500;
+}
+
+/* Tighten dividers */
+hr {
+    margin: 1.25rem 0 !important;
+    opacity: 0.5;
 }
 </style>
 """
