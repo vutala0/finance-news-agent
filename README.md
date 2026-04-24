@@ -1,15 +1,16 @@
 # Finance News Intelligence Agent
 
-An AI-powered tool that analyzes recent financial news for a given stock ticker and classifies each article by its likely impact on the stock price.
+**Live demo: [finance-news-intelligence.streamlit.app](https://finance-news-intelligence.streamlit.app/)**
 
-## What It Does
+An AI-powered financial news classifier grounded in a Retrieval-Augmented Generation (RAG) pipeline. Enter a stock ticker, and the system fetches recent news, filters for substantive coverage through a two-stage relevance pipeline, and classifies each article by its likely impact on the stock — with retrieved historical precedents visible for every classification.
 
-Given a stock ticker (e.g., `AAPL`, `TSLA`), the agent:
+## Stack
 
-1. Fetches the most recent news articles from Yahoo Finance
-2. Sends each article to Google Gemini for classification
-3. Returns a structured sentiment (bullish / bearish / neutral) with confidence, relevance, and reasoning
-4. Summarizes sentiment distribution across recent news
+- **Classification:** Google Gemini (Flash-Lite)
+- **Embeddings:** Google `gemini-embedding-001`
+- **Vector store:** ChromaDB (local persistence)
+- **News source:** Finnhub API
+- **UI:** Streamlit (deployed on Streamlit Cloud)
 
 ## Why This Project
 
@@ -30,6 +31,15 @@ classifier.py    →  Gemini API (structured JSON output)
     ↓
 main.py          →  Orchestration + summary
 ```
+
+### News Ingestion and Filtering
+
+News is fetched from Yahoo Finance (via yfinance), then passed through a two-stage relevance filter:
+
+1. **Stage 1 (heuristic):** company identifiers (ticker + canonical name) must appear in title or summary
+2. **Stage 2 (LLM):** a Gemini Flash-Lite call per candidate article asks whether the article is primarily about the target company, not merely mentioning it
+
+The cost-tiered cascade means LLM calls only run on articles that survived the heuristic, and we early-exit once we've collected enough relevant results. This pattern keeps the pipeline fast and cheap while catching the cases where simple string-matching fails (e.g., "Nike... Apple CEO Tim Cook" mentions Apple but isn't about Apple).
 
 ## Running Locally
 
@@ -69,10 +79,11 @@ python main.py
 - [x] Evaluation harness — hand-labeled test set + automated grading
 - [x] Few-shot prompting experiment — regressed, reverted
 - [x] RAG pipeline — ChromaDB + semantic retrieval of labeled precedents
+- [x] Two-stage relevance filter — heuristic + LLM-based source quality control
+- [x] Streamlit UI with RAG visualization
+- [ ] Public deployment (Streamlit Cloud)
 - [ ] Corpus expansion — grow golden set to 100+ items for meaningful RAG gains
-- [ ] Retrieval instrumentation — measure retrieval quality separate from end-to-end accuracy
-- [ ] Web UI (Streamlit)
-- [ ] Public deployment
+- [ ] Market-outcome ground truth — objective price-based labels
 
 ## Evaluation
 
