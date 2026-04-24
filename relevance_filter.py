@@ -33,22 +33,26 @@ _client = genai.Client(api_key=api_key)
 MODEL_NAME = "gemini-2.5-flash-lite"
 
 
-RELEVANCE_PROMPT = """Is the following article PRIMARILY about {company_name} ({ticker})?
+RELEVANCE_PROMPT = """Is the following article genuinely useful to someone tracking news about {company_name} ({ticker})?
 
-"Primarily about" means {company_name} is the main subject — its earnings, 
-products, leadership, strategy, stock, or specific events affecting it.
+An article is USEFUL if:
+- {company_name} is the main subject, OR
+- {company_name} is directly and materially affected by what the article describes, OR
+- The article discusses something {company_name} is actively doing, deciding, or involved in
 
-"NOT primarily about" means {company_name} is only mentioned in passing, 
-or the article is mostly about a competitor, a sector trend, or a different 
-company that happens to reference {company_name}.
+An article is NOT USEFUL if:
+- {company_name} is just one name in a long list of companies mentioned
+- {company_name} appears only as brief context or a single incidental mention
+- The article is about a different company that merely references {company_name}
+- The article is generic market/sector commentary that happens to name {company_name}
 
 Article Title: {title}
 Article Summary: {summary}
 
 Respond with ONLY one word: YES or NO.
 
-YES = the article is primarily about {company_name}
-NO = {company_name} is only mentioned, the article is about something else"""
+YES = genuinely useful to someone tracking {company_name}
+NO = {company_name} is only tangentially present"""
 
 
 def is_article_about(title: str, summary: str, ticker: str, company_name: str) -> bool:

@@ -11,15 +11,18 @@ downstream classification.
 import re
 import yfinance as yf
 from relevance_filter import is_article_about
+from ticker_aliases import get_aliases, get_primary_name_override
 
 
-def _get_company_identifiers(ticker_obj: yf.Ticker) -> tuple[set[str], str]:
+def _get_company_identifiers(ticker_obj: yf.Ticker, ticker_symbol: str) -> tuple[set[str], str]:
     """
     Return a tuple of:
       - set of identifier strings (for Stage 1 heuristic filter)
       - primary company name (for Stage 2 LLM relevance check)
     
-    Example for TSLA: ({"tsla", "tesla, inc.", "tesla"}, "Tesla")
+    Uses yfinance metadata first, then augments with manual aliases from 
+    ticker_aliases.py for cases where Yahoo's data is misleading 
+    (brand vs. legal name).
     """
     identifiers = set()
     primary_name = ""
@@ -29,7 +32,8 @@ def _get_company_identifiers(ticker_obj: yf.Ticker) -> tuple[set[str], str]:
     except Exception:
         info = {}
     
-    symbol = info.get("symbol", "")
+    # From Yahoo metadata
+    symbol = info.get("symbol", "") or ticker_symbol
     if symbol:
         identifiers.add(symbol.lower())
     
@@ -39,7 +43,7 @@ def _get_company_identifiers(ticker_obj: yf.Ticker) -> tuple[set[str], str]:
         first_word = short_name.split(",")[0].split(" ")[0].strip()
         if len(first_word) >= 3:
             identifiers.add(first_word.lower())
-            primary_name = first_word  # e.g., "Tesla" from "Tesla, Inc."
+            primary_name = first_word
     
     long_name = info.get("longName", "")
     if long_name:
@@ -50,8 +54,15 @@ def _get_company_identifiers(ticker_obj: yf.Ticker) -> tuple[set[str], str]:
             if not primary_name:
                 primary_name = first_word
     
-    # Fallback: use the ticker if we somehow got no name
-    if not primary_name:
+    # Augment with manual aliases (brand names, common synonyms)
+    for alias in get_aliases(ticker_symbol):
+        identifiers.add(alias.lower())
+    
+    # Override primary name if we have a manual one (better for LLM prompt)
+    override = get_primary_name_override(ticker_symbol)
+    if override:
+        primary_name = override
+    elif not primary_name:
         primary_name = symbol or "the company"
     
     return identifiers, primary_name
@@ -85,19 +96,16 @@ def fetch_news(ticker: str, limit: int = 5) -> list[dict]:
     """
     Fetch recent news articles for a given ticker, with two-stage filtering:
     
-    Stage 1 (heuristic): company name or ticker appears in title/summary.
-    Stage 2 (LLM): article is primarily about the company, not just mentioning it.
+    Stage 1 (heuristic): company identifiers appear in title/summary.
+    Stage 2 (LLM): article is genuinely useful to someone tracking the company.
     
-    Args:
-        ticker: Stock ticker symbol (e.g., "AAPL", "MSFT")
-        limit: Maximum number of RELEVANT news items to return
-    
-    Returns:
-        List of dicts with title, publisher, link, summary.
+    Fallback: if stage 1 rejects everything, skip stage 1 and rely on stage 2 
+    alone. Handles cases where yfinance returns ticker-tagged articles whose 
+    text doesn't explicitly name the company (rare but real).
     """
     stock = yf.Ticker(ticker)
     raw_news = stock.news or []
-    identifiers, primary_name = _get_company_identifiers(stock)
+    identifiers, primary_name = _get_company_identifiers(stock, ticker)
     
     # Extract all candidates
     candidates = []
@@ -111,16 +119,19 @@ def fetch_news(ticker: str, limit: int = 5) -> list[dict]:
         })
     
     # --- Stage 1: Heuristic filter ---
-    # Must mention the company somewhere in title or summary
     stage1 = [a for a in candidates if _is_relevant(a, identifiers)]
     
-    # --- Stage 2: LLM relevance check ---
-    # Ask the LLM whether the article is primarily about the company
-    # We only run this on articles that passed stage 1, since stage 1 is ~free
-    # and this step has a small LLM cost per call.
-    print(f"  Filtering news for {ticker}: "
-          f"{len(candidates)} raw → {len(stage1)} after stage 1...")
+    # Fallback: if heuristic rejected everything, let the LLM do all the work
+    used_fallback = False
+    if len(stage1) == 0 and len(candidates) > 0:
+        stage1 = candidates
+        used_fallback = True
     
+    fallback_note = " (FALLBACK: heuristic found nothing, trusting yfinance tagging)" if used_fallback else ""
+    print(f"  Filtering news for {ticker}: "
+          f"{len(candidates)} raw → {len(stage1)} after stage 1{fallback_note}...")
+    
+    # --- Stage 2: LLM relevance check ---
     stage2 = []
     for article in stage1:
         if is_article_about(
@@ -130,22 +141,9 @@ def fetch_news(ticker: str, limit: int = 5) -> list[dict]:
             company_name=primary_name
         ):
             stage2.append(article)
-        # Early exit — if we have enough, stop making LLM calls
         if len(stage2) >= limit:
             break
     
     print(f"  → {len(stage2)} after stage 2 (LLM relevance check)")
     
     return stage2[:limit]
-
-
-if __name__ == "__main__":
-    print("Testing news fetcher with TSLA...\n")
-    news = fetch_news("TSLA", limit=5)
-    print(f"Returned {len(news)} relevant articles (after filtering):\n")
-    for i, item in enumerate(news, 1):
-        print(f"--- Article {i} ---")
-        print(f"Title: {item['title']}")
-        print(f"Publisher: {item['publisher']}")
-        print(f"Summary preview: {item['summary'][:150]}...")
-        print()
